@@ -21,26 +21,25 @@ services:
       sh -c "go install github.com/pressly/goose/v3/cmd/goose@latest &&
             goose up"
     depends_on:
-      - pg # Goose запустится только после PostgreSQL
+      - pg 
     environment:
       PG_USER: ${PG_USER}
       PG_PASSWORD: ${PG_PASSWORD}
       PG_DATABASE_NAME: ${PG_DATABASE_NAME}
     volumes:
-      - .:/avito # Монтируем текущую директорию проекта для доступа к миграциям
-
+      - .:/avito 
   app:
     build:
       context: .
       dockerfile: Dockerfile
     environment:
-      PG_HOST: pg # Имя контейнера PostgreSQL
+      PG_HOST: pg 
       PG_USER: ${PG_USER}
       PG_PASSWORD: ${PG_PASSWORD}
       PG_DATABASE_NAME: ${PG_DATABASE_NAME}
       PG_PORT: 5432
     ports:
-      - "8080:8080" # Доступ к приложению через localhost:8080
+      - "8080:8080" 
     depends_on:
-      - pg # Приложение запустится только после PostgreSQL
-      - goose # Приложение ждёт применения миграций через Goose
+      - pg 
+      - goose 
