@@ -1,6 +1,8 @@
 package services
 
 import (
+	"log"
+
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -12,6 +14,11 @@ func HashPassword(password string) (string, error) {
 	return string(hashedPassword), nil
 }
 
-func VerifyPassword(password, hashedPassword string) error {
-	return bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
+func VerifyPassword(password, hash string) error {
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	if err != nil {
+		log.Printf("Password verification failed: %v", err)
+		return err
+	}
+	return nil
 }

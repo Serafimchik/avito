@@ -1,17 +1,13 @@
 package handlers
 
 import (
-	"context"
+	"avito/internal/services"
 	"encoding/json"
-	"errors"
+	"log"
 	"net/http"
 	"time"
 
-	"avito/internal/services"
-
-	"github.com/Masterminds/squirrel"
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/jackc/pgx/v5"
 )
 
 func Auth(w http.ResponseWriter, r *http.Request) {
@@ -20,85 +16,68 @@ func Auth(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 
+	// Декодируем запрос
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Username == "" || req.Password == "" {
+		log.Printf("Invalid request: %v", err)
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
 
-	hashedPassword, err := services.HashPassword(req.Password)
+	log.Printf("Checking if user exists: %s", req.Username)
+
+	// Проверяем, существует ли пользователь
+	userExists, userId, userHash, err := services.CheckUserExists(req.Username)
 	if err != nil {
-		http.Error(w, "Failed to hash password", http.StatusInternalServerError)
+		log.Printf("Error checking user existence: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	err = services.RegisterUser(req.Username, hashedPassword)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, errors.New("user already exists")) {
+	if userExists {
+		log.Printf("User exists: %s", req.Username)
 
-		} else {
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+		// Проверяем пароль
+		if err := services.VerifyPassword(req.Password, userHash); err != nil {
+			log.Printf("Invalid credentials for user: %s", req.Username)
+			http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+			return
+		}
+	} else {
+		log.Printf("User does not exist, registering: %s", req.Username)
+
+		// Хэшируем пароль
+		hashedPassword, err := services.HashPassword(req.Password)
+		if err != nil {
+			log.Printf("Failed to hash password: %v", err)
+			http.Error(w, "Failed to hash password", http.StatusInternalServerError)
+			return
+		}
+
+		// Регистрируем нового пользователя
+		userId, err = services.RegisterUser(req.Username, hashedPassword)
+		if err != nil {
+			log.Printf("Failed to register user: %v", err)
+			http.Error(w, "Failed to register user", http.StatusInternalServerError)
 			return
 		}
 	}
 
-	var userHash string
-	query := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).
-		Select("password_hash").
-		From("users").
-		Where(squirrel.Eq{"username": req.Username})
+	log.Printf("Generating token for user: %s", req.Username)
 
-	sqlStr, args, err := query.ToSql()
-	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	err = services.Pool.QueryRow(context.Background(), sqlStr, args...).Scan(&userHash)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			http.Error(w, "User not found", http.StatusUnauthorized)
-			return
-		}
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	if err := services.VerifyPassword(req.Password, userHash); err != nil {
-		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
-		return
-	}
-
-	var userId int
-	query = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).
-		Select("id").
-		From("users").
-		Where(squirrel.Eq{"username": req.Username})
-
-	sqlStr, args, err = query.ToSql()
-	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	err = services.Pool.QueryRow(context.Background(), sqlStr, args...).Scan(&userId)
-	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
+	// Генерируем токен
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": userId,
 		"exp":     time.Now().Add(24 * time.Hour).Unix(),
 	})
+
 	tokenString, err := token.SignedString([]byte("secret-key"))
 	if err != nil {
+		log.Printf("Failed to generate token: %v", err)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
 	}
 
-	ctx := context.WithValue(r.Context(), "user_id", userId)
-	r = r.WithContext(ctx)
-
+	// Возвращаем токен
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"token": tokenString})
 }
