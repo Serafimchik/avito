@@ -4,14 +4,19 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"avito-shop/internal/services"
+	"avito/internal/services"
 )
 
 func GetInfo(w http.ResponseWriter, r *http.Request) {
-	username := r.Context().Value("username").(string)
-	info, err := services.GetUserInfo(username)
+	userId, ok := r.Context().Value("user_id").(int)
+	if !ok {
+		http.Error(w, "Invalid user ID in context", http.StatusInternalServerError)
+		return
+	}
+
+	info, err := services.GetUserInfo(userId)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 

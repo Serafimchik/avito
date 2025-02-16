@@ -36,13 +36,14 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		}
 
 		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok || claims["username"] == nil {
+		if !ok || claims["user_id"] == nil {
 			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
 		}
 
-		username := claims["username"].(string)
-		ctx := context.WithValue(r.Context(), "username", username)
+		userID := int(claims["user_id"].(float64))
+
+		ctx := context.WithValue(r.Context(), "user_id", userID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

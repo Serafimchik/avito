@@ -4,20 +4,29 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"avito-shop/internal/services"
+	"avito/internal/services"
 
 	"github.com/go-chi/chi/v5"
 )
 
 func BuyItem(w http.ResponseWriter, r *http.Request) {
-	item := chi.URLParam(r, "item")
-	username := r.Context().Value("username").(string)
+	userID, ok := r.Context().Value("user_id").(int)
+	if !ok {
+		http.Error(w, "Invalid user ID in context", http.StatusInternalServerError)
+		return
+	}
 
-	if err := services.BuyItem(username, item); err != nil {
+	itemType := chi.URLParam(r, "item")
+	if itemType == "" {
+		http.Error(w, "Item type is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := services.BuyItem(userID, itemType); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Item bought successfully"})
 }

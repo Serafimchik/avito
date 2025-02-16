@@ -4,24 +4,24 @@ import (
 	"log"
 	"net/http"
 
-	"avito-shop/internal/appMiddleware"
-	"avito-shop/internal/handlers"
+	"avito/internal/appMiddleware"
+	"avito/internal/handlers"
+	"avito/internal/services"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
 func main() {
+	services.InitDB()
+
 	r := chi.NewRouter()
 
-	// Подключение middleware
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Logger)
 
-	// Обработчики без авторизации
 	r.Post("/api/auth", handlers.Auth)
 
-	// Обработчики с авторизацией
 	r.Group(func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware)
 

@@ -1,23 +1,33 @@
 package services
 
 import (
-	"errors"
-	"time"
+	"context"
+	"log"
 
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/Masterminds/squirrel"
 )
 
-var users = map[string]string{
-	"user": "password",
-}
+func RegisterUser(username, passwordHash string) error {
+	ctx := context.Background()
 
-func Authenticate(username, password string) (string, error) {
-	if pwd, ok := users[username]; ok && pwd == password {
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"username": username,
-			"exp":      time.Now().Add(24 * time.Hour).Unix(),
-		})
-		return token.SignedString([]byte("secret-key"))
+	var userId int
+
+	insertQuery := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).
+		Insert("users").
+		Columns("username", "password_hash", "coins").
+		Values(username, passwordHash, 1000).
+		Suffix("RETURNING id")
+
+	sqlStr, args, err := insertQuery.ToSql()
+	if err != nil {
+		return err
 	}
-	return "", errors.New("invalid credentials")
+
+	err = Pool.QueryRow(ctx, sqlStr, args...).Scan(&userId)
+	if err != nil {
+		log.Printf("Failed to register user: %v", err)
+		return err
+	}
+
+	return nil
 }
